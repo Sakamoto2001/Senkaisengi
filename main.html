@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ほぼ千怪戦戯：1.0 </title>
+<style>
+/* === 基本スタイル === */
+body {
+  margin: 0;
+  padding: 0;
+  background: #f3f2ed;
+  font-family: "Segoe UI", "Hiragino Sans", sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+h1 {
+  margin: 12px 0 8px;
+  font-size: 22px;
+  color: #333;
+}
+
+button {
+  margin-bottom: 10px;
+  padding: 8px 16px;
+  font-size: 16px;
+  border-radius: 8px;
+  background: #0052cc;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+button:hover { background: #003d99; }
+
+/* === ボードレイアウト === */
+.board {
+  position: relative;
+  width: 900px;
+  height: 700px;
+  background: #ffffff;
+  border: 3px solid #555;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  display: grid;
+  grid-template-areas:
+    "wallZone lane lane lane mainDeck"
+    "wallZone lane lane lane mainDeck"
+    "magicDeck magicZone magicZone discard discard"
+    "hand hand hand hand hand";
+  grid-template-columns: 140px 1fr 3fr 1fr 140px;
+  grid-template-rows: 160px 120px 250px 130px;
+  gap: 8px;
+  padding: 12px;
+}
+
+/* === ゾーン共通 === */
+.zone {
+  background: #fafafa;
+  border: 2px solid #999;
+  border-radius: 10px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-weight: bold;
+  color: #333;
+}
+.zone::after {
+  content: attr(data-label);
+  position: absolute;
+  bottom: 4px;
+  right: 6px;
+  font-size: 12px;
+  color: #555;
+}
+
+/* === 各ゾーン位置指定 === */
+.wall-zone { grid-area: wallZone; display: flex; flex-direction: column; justify-content: space-around; align-items: center; overflow-x: auto; }
+.magic-deck { grid-area: magicDeck; cursor: pointer; }
+.magic-zone { grid-area: magicZone; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: nowrap; overflow-x: auto; background: #fff5e6; }
+.main-deck { grid-area: mainDeck; cursor: pointer; transition: transform 0.2s; background: #eaf2ff; }
+.main-deck:hover { transform: scale(1.05); }
+.discard { grid-area: discard; background: #f8f8f8; display: flex; flex-wrap: nowrap; overflow-x: auto; }
+.lanes { grid-area: lane; display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: nowrap; overflow-x: auto; padding: 5px; }
+.hand { grid-area: hand; display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: nowrap; overflow-x: auto; padding: 5px; }
+
+/* === レーン === */
+.lane {
+  flex: 0 0 auto;
+  width: 20vw;
+  height: 30vw;
+  max-width: 180px;
+  max-height: 250px;
+  border: 2px dashed #aaa;
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+/* === カードスタイル === */
+.card {
+  width: 18vw;
+  height: 27vw;
+  max-width: 120px;
+  max-height: 180px;
+  background-size: cover;
+  background-position: center;
+  border-radius: 8px;
+  margin: 4px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.FrontCard {
+  width: 18vw;
+  height: 27vw;
+  max-width: 180px;
+  max-height: 250px;
+}
+
+.card:hover { transform: scale(1.1); }
+
+/* 魔力カード：タップ（横向き）表示 */
+.magic-card.tapped {
+  transform: rotate(90deg);
+  transform-origin: center center;
+  transition: transform 0.3s ease;
+}
+
+/* レーンカード：タップ状態（横向き） */
+.card.FrontCard.tapped {
+  width: 120px;
+  height: 180px;
+  transform: rotate(90deg);
+  transform-origin: center center;
+  transition: transform 0.3s ease;
+}
+
+/* ウォールカードサイズ */
+.wall-zone .card {
+  width: 90px;
+  height: 60px;
+  cursor: default;
+}
+
+/* 情報表示 */
+.info {
+  font-size: 14px;
+  color: #333;
+  margin-top: 8px;
+}
+
+/* === モーダル === */
+.lane-select-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.lane-select-box {
+  background: #fff;
+  width: 90vw;
+  max-width: 400px;
+  padding: 20px 16px;
+  border-radius: 16px;
+  box-shadow: 0 0 20px rgba(0,0,0,0.3);
+  text-align: center;
+}
+
+.card-preview-box,
+.wall-preview {
+  width: 80vw;
+  height: 120vw;
+  max-width: 350px;
+  max-height: 500px;
+  margin: 10px auto;
+  background-size: cover;
+  background-position: center;
+  border: 2px solid #555;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+.lane-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 15px;
+  flex-wrap: wrap;
+}
+
+.lane-buttons button {
+  background: #4b7bec;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 0.2s;
+}
+.lane-buttons button:hover {
+  background: #3867d6;
+}
+
+/* === カード拡大プレビュー === */
+.card-preview {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 3000;
+}
+
+.card-preview.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.card-preview-inner {
+  width: 80vw;
+  height: 120vw;
+  max-width: 600px;
+  max-height: 800px;
+  background-size: cover;
+  background-position: center;
+  border-radius: 12px;
+  box-shadow: 0 0 25px rgba(0,0,0,0.5);
+  border: 4px solid white;
+  transform: scale(1.1);
+}
+
+/* === カード内ボタン（削除・手札へ）=== */
+.card .delete-btn,
+.card .return-btn {
+  position: absolute;
+  padding: 2px 6px;
+  font-size: 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: white;
+  opacity: 0.85;
+  transition: opacity 0.2s ease;
+}
+
+/* 捨札ボタン（右側） */
+.card .delete-btn {
+  background-color: crimson;
+  right: 4px;
+  bottom: 40px;
+}
+
+/* 手札へボタン（左側） */
+.card .return-btn {
+  background-color: royalblue;
+  left: 4px;
+  bottom: 40px;
+}
+
+.card.FrontCard.tapped .delete-btn,
+.card.FrontCard.tapped .return-btn {
+  transform: rotate(270deg);
+}
+
+/* 捨札ボタン（赤） */
+.discardBtn {
+  background-color: crimson !important;
+}
+
+/* === スマホ向け調整 === */
+@media (max-width: 768px) {
+  .board {
+    width: 100vw;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px;
+    gap: 12px;
+  }
+
+  .zone {
+    min-width: 90vw;
+    flex-wrap: nowrap;
+  }
+
+  .card {
+    width: 28vw;
+    height: 42vw;
+    max-width: 120px;
+    max-height: 180px;
+  }
+
+  .FrontCard {
+    width: 28vw;
+    height: 42vw;
+    max-width: 180px;
+    max-height: 250px;
+  }
+
+  .lane {
+    width: 30vw;
+    height: 45vw;
+    max-width: 180px;
+    max-height: 250px;
+  }
+
+  .card-preview-inner {
+    width: 85vw;
+    height: 127vw;
+  }
+}
+
+
+</style>
+</head>
+<body>
+
+<h1>ほぼ千怪戦戯：1.0 </h1>
+<button id="startBtn">千戯開戦!!(スタート)</button>
+
+<div class="board">
+  <div class="zone wall-zone" data-label="ウォールゾーン"></div>
+  <div class="zone lanes" data-label="レーン">
+    <div class="lane" data-pos="left"></div>
+    <div class="lane" data-pos="center"></div>
+    <div class="lane" data-pos="right"></div>
+  </div>
+  <div class="zone main-deck" data-label="メインデッキ"></div>
+  <div class="zone discard" data-label="捨て札"></div>
+  <div class="zone magic-deck" data-label="魔力デッキ"></div>
+  <div class="zone magic-zone" data-label="魔力ゾーン"></div>
+  <div class="zone hand" data-label="手札"></div>
+</div>
+
+<div class="info" id="deckCountInfo">デッキ残枚数: -</div>
+<div class="info" id="magicPowerInfo">総魔力量: 0</div>
+<!-- <button id="undoBtn">1手戻す</button>  保留-->
+<button id="untapBtn">ターン開始（魔力アップ + 1ドロー + 魔力ゾーン2枚追加 </button>
+<script>
+// ==============================
+// 千怪戦戯風カードボード V3.0-MOBILE
+// スマホ最適化版（タップ操作 + 長押しプレビュー）
+// ==============================
+
+const mainDeckZone = document.querySelector('.main-deck');
+const handZone = document.querySelector('.hand');
+const lanes = document.querySelectorAll('.lane');
+const discardZone = document.querySelector('.discard');
+const magicDeckZone = document.querySelector('.magic-deck');
+const magicZone = document.querySelector('.magic-zone');
+const wallZone = document.querySelector('.wall-zone');
+const deckCountInfo = document.getElementById('deckCountInfo');
+const magicPowerInfo = document.getElementById('magicPowerInfo');
+const startBtn = document.getElementById('startBtn');
+const untapBtn = document.getElementById('untapBtn');
+
+const CARD_BACK = "back.jpg";
+const MANA_BACK = "m_back.jpg";
+
+let deck = [];
+let magicDeck = [];
+let hand = [];
+let discardPile = [];
+let magicZoneCards = [];
+let wallCards = [];
+let history = [];
+
+function init() {
+  mainDeckZone.innerHTML = "";
+  handZone.innerHTML = "";
+  discardZone.innerHTML = "";
+  magicDeckZone.innerHTML = "";
+  magicZone.innerHTML = "";
+  wallZone.innerHTML = "";
+  lanes.forEach(l => (l.innerHTML = ""));
+
+  
+
+  const allCards = Array.from({ length: 20 }, (_, i) => ({
+    id: `d${i + 1}`,
+    img: `d${String(i + 1).padStart(2, '0')}.jpg`
+  }));
+
+  const shuffled = [...allCards].sort(() => Math.random() - 0.5);
+
+  wallCards = shuffled.slice(0, 4).map(c => ({ ...c, faceUp: false }));
+  hand = shuffled.slice(4, 8);
+  deck = shuffled.slice(8);
+
+  magicDeck = Array.from({ length: 10 }, (_, i) => ({
+    id: `m${i + 1}`,
+    img: `m${String(i + 1).padStart(2, '0')}.jpg`
+  })).sort(() => Math.random() - 0.5);
+
+  if (magicDeck.length > 0) {
+    const mBack = document.createElement("div");
+    mBack.className = "card";
+    mBack.style.backgroundImage = `url(${MANA_BACK})`;
+    magicDeckZone.appendChild(mBack);
+  }
+
+  if (deck.length > 0) {
+    const dBack = document.createElement("div");
+    dBack.className = "card";
+    dBack.style.backgroundImage = `url(${CARD_BACK})`;
+    mainDeckZone.appendChild(dBack);
+  }
+
+  discardPile = [];
+  magicZoneCards = [];
+  history = [];
+
+  updateBoard();
+  updateInfo();
+}
+
+// ==============================
+// Undo機能
+// ==============================
+function saveState() {
+  const snapshot = JSON.stringify({ deck, hand, discardPile, magicZoneCards, wallCards });
+  history.push(snapshot);
+  if (history.length > 5) history.shift();
+}
+
+function undo() {
+  if (history.length === 0) return alert("戻せる操作はありません。");
+  const prev = history.pop();
+  const state = JSON.parse(prev);
+  ({ deck, hand, discardPile, magicZoneCards, wallCards } = state);
+  updateBoard();
+  updateInfo();
+}
+
+// ==============================
+// ボード更新
+// ==============================
+function updateBoard() {
+  handZone.innerHTML = "";
+  discardZone.innerHTML = "";
+  magicZone.innerHTML = "";
+  wallZone.innerHTML = "";
+
+  hand.forEach(c => handZone.appendChild(createCardElement(c)));
+  discardPile.forEach(c => discardZone.appendChild(createCardElement(c)));
+  magicZoneCards.forEach(c => {
+    const el = createCardElement(c);
+    el.classList.add('magic-card');
+    if (c.tapped) el.classList.add('tapped');
+    magicZone.appendChild(el);
+  });
+
+  wallCards.forEach(c => {
+    const el = createCardElement(c);
+    if (!c.faceUp) el.style.backgroundImage = `url('${CARD_BACK}')`;
+    wallZone.appendChild(el);
+  });
+}
+
+// ==============================
+// イベント設定
+// ==============================
+startBtn.addEventListener('click', init);
+untapBtn.addEventListener('click', handleUntap);
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'z') undo();
+});
+
+mainDeckZone.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (deck.length === 0) return alert("デッキがありません。");
+  saveState();
+  const drawn = deck.shift();
+  hand.push(drawn);
+  updateBoard();
+  updateInfo();
+});
+
+// ==============================
+// アンタップボタン処理
+// ==============================
+function handleUntap() {
+  saveState();
+  magicZoneCards.forEach(c => (c.tapped = false));
+  document.querySelectorAll('.lane .card').forEach(el => el.classList.remove('tapped'));
+  if (deck.length > 0) hand.push(deck.shift());
+  for (let i = 0; i < 2; i++) {
+    if (magicDeck.length > 0) magicZoneCards.push({ ...magicDeck.shift(), tapped: false });
+  }
+  updateBoard();
+  updateInfo();
+}
+
+// ==============================
+// カード生成（スマホ対応）
+// ==============================
+function createCardElement(card) {
+  const el = document.createElement('div');
+  el.classList.add('card');
+  el.style.backgroundImage = `url(${card.img})`;
+
+  // 長押しでプレビュー
+  let pressTimer;
+  const startPress = () => {
+    pressTimer = setTimeout(() => toggleCardPreview(card.img), 500);
+  };
+  const endPress = () => clearTimeout(pressTimer);
+
+  el.addEventListener('touchstart', startPress);
+  el.addEventListener('touchend', endPress);
+  el.addEventListener('mousedown', startPress);
+  el.addEventListener('mouseup', endPress);
+
+  // 通常タップ操作
+  el.addEventListener('touchend', e => handleCardTap(e, card, el), { passive: false });
+
+  return el;
+}
+
+// ==============================
+// カードタップ操作
+// ==============================
+function handleCardTap(e, card, el) {
+  e.preventDefault();
+
+  // 魔力ゾーン：タップ切り替え
+  if (magicZone.contains(el)) {
+    saveState();
+    card.tapped = !card.tapped;
+    updateBoard();
+    return;
+  }
+
+  // 手札 → レーン選択
+  if (hand.includes(card)) {
+    showLaneSelectModal(card, lane => {
+      if (lane === 'discard') {
+        saveState();
+        hand = hand.filter(c => c !== card);
+        discardPile.push(card);
+        updateBoard();
+        updateInfo();
+        return;
+      }
+      saveState();
+      const targetLane = document.querySelector(`.lane[data-pos="${lane}"]`);
+      if (!targetLane) return;
+      hand = hand.filter(c => c !== card);
+      card.zone = 'lane';
+      targetLane.appendChild(createCardElement(card));
+      updateBoard();
+    });
+    return;
+  }
+
+  // ウォールゾーン：クリック処理
+  if (wallZone.contains(el)) {
+    handleWallCardClick(card);
+    return;
+  }
+}
+
+// ==============================
+// ウォールカードクリック処理
+// ==============================
+function handleWallCardClick(card) {
+  if (!card.faceUp) {
+    saveState();
+    card.faceUp = true;
+  }
+  updateBoard();
+  showWallChoiceDialog(card);
+}
+
+// ==============================
+// モーダル関数群
+// ==============================
+function showLaneSelectModal(card, onSelect) {
+  const modal = document.createElement('div');
+  modal.classList.add('lane-select-modal');
+  const box = document.createElement('div');
+  box.classList.add('lane-select-box');
+  box.innerHTML = `
+    <h3>配置先を選択</h3>
+    <div class="card-preview-box"
+         style="width:80vw;max-width:350px;height:60vh;
+                background-image:url('${card.img}');
+                background-size:cover;background-position:center;
+                border:2px solid #555;border-radius:8px;margin:auto;"></div>
+    <div class="lane-buttons">
+      <button data-lane="left">左</button>
+      <button data-lane="center">中央</button>
+      <button data-lane="right">右</button>
+      <button data-lane="discard" class="discardBtn">捨札</button>
+      <button data-lane="cancel">キャンセル</button>
+    </div>
+  `;
+  modal.appendChild(box);
+  document.body.appendChild(modal);
+
+  box.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('touchend', e => {
+      e.preventDefault();
+      const pos = btn.dataset.lane;
+      if (pos !== 'cancel') onSelect(pos);
+      modal.remove();
+    });
+  });
+}
+
+function showWallChoiceDialog(card) {
+  const modal = document.createElement('div');
+  modal.classList.add('lane-select-modal');
+  const box = document.createElement('div');
+  box.classList.add('lane-select-box');
+  box.innerHTML = `
+    <h3>ウォールカード操作</h3>
+    <div class="wall-preview" style="width:80vw;max-width:350px;height:60vh;
+         background-image:url('${card.img}');
+         background-size:cover;background-position:center;
+         border:2px solid #555;border-radius:8px;margin:auto;"></div>
+    <p>どうしますか？</p>
+    <div class="lane-buttons">
+      <button id="toHandBtn">手札に加える</button>
+      <button id="toDiscardBtn" class="discardBtn">捨て札にする</button>
+      <button id="cancelBtn">キャンセル</button>
+    </div>
+  `;
+  modal.appendChild(box);
+  document.body.appendChild(modal);
+
+  box.querySelector('#toHandBtn').addEventListener('touchend', e => {
+    e.preventDefault();
+    saveState();
+    wallCards = wallCards.filter(c => c !== card);
+    hand.push(card);
+    closeModal(modal);
+    updateBoard();
+  });
+  box.querySelector('#toDiscardBtn').addEventListener('touchend', e => {
+    e.preventDefault();
+    saveState();
+    wallCards = wallCards.filter(c => c !== card);
+    discardPile.push(card);
+    closeModal(modal);
+    updateBoard();
+  });
+  box.querySelector('#cancelBtn').addEventListener('touchend', e => closeModal(modal));
+}
+
+function closeModal(modal) {
+  modal.remove();
+}
+
+// ==============================
+// 情報更新
+// ==============================
+function updateInfo() {
+  deckCountInfo.textContent = `デッキ残: ${deck.length}`;
+  magicPowerInfo.textContent = `魔力: ${magicZoneCards.length}`;
+}
+
+// ==============================
+// プレビュー
+// ==============================
+let previewEl = null;
+function toggleCardPreview(img) {
+  if (previewEl) {
+    previewEl.remove();
+    previewEl = null;
+    return;
+  }
+  previewEl = document.createElement('div');
+  previewEl.classList.add('card-preview', 'visible');
+  previewEl.innerHTML = `
+    <div class="card-preview-inner"
+         style="background-image:url(${img});
+                background-size:cover;
+                width:90vw;height:90vh;margin:auto;"></div>`;
+  document.body.appendChild(previewEl);
+  previewEl.addEventListener('touchend', () => {
+    previewEl.remove();
+    previewEl = null;
+  });
+}
+
+
+</script>
+</body>
+</html>
